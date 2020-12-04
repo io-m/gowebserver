@@ -4,10 +4,14 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+
+	r "github.com/io-m/gowebserver/router"
 )
 
 func main() {
-	http.HandleFunc("/", HomeHandler)
+	ph := r.NewProductHandler()
+	http.Handle("/products", ph)
+	http.Handle("/products/", ph)
 	// Using defaultServeMux
 	log.Fatal(http.ListenAndServe(":5500", nil))
 }

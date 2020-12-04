@@ -2,9 +2,12 @@ package router
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -20,6 +23,8 @@ type AllProducts []Product
 
 // ProductHandler is our custom router struct that handles different HTTP methods
 type ProductHandler struct {
+	// We need to lock access to DB for every other router
+	// than one that is accessing at that exact time
 	sync.Mutex
 	products AllProducts
 }
@@ -68,14 +73,43 @@ func respondERROR(w http.ResponseWriter, statusCode int, errMsg string) {
 	respondJSON(w, statusCode, map[string]string{"error": errMsg})
 }
 
+// Writing auxilliary function to fetch id from URL
+func getId(r *http.Request) (int, error) {
+	url := r.URL.String()
+	// Splting the URL string on trailing slash
+	// strings.Split() returns []string
+	splitedURL := strings.Split(url, "/")
+	id := splitedURL[len(splitedURL)-1]
+	// Converting id from string to int
+	ID, err := strconv.Atoi(id)
+	if err != nil {
+		return 0, errors.New("Not found")
+	}
+	return ID, nil
+}
+
 // Get function fetches data from DB (mockup struct)
 func (ph *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello from GET method")
+	defer ph.Unlock()
+	ph.Lock()
+	// Calling aux function getId to fetch id param from URL
+	id, err := getId(r)
+	// if there is an error with fetching id
+	// that means there is no id, so we can send ALL data
+	if err != nil {
+		respondJSON(w, http.StatusOK, ph.products)
+		return
+	}
+	if id >= len(ph.products) || id < 0 {
+		respondERROR(w, http.StatusNotFound, "There is no that product")
+		return
+	}
+	respondJSON(w, http.StatusOK, ph.products[id])
 }
 
 // Post function sends/writes to data in DB
 func (ph *ProductHandler) Post(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello from POST method")
+
 }
 
 // Put function updates data in DB
