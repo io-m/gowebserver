@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 )
 
 // Product is a struct that defines data sent over HTTP methods
+// Used when unmarshalling incomming data from *http.Request
 type Product struct {
 	Name  string  `json:"name,omitempty"`
 	Price float64 `json:"price,omitempty"`
@@ -109,7 +111,32 @@ func (ph *ProductHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 // Post function sends/writes to data in DB
 func (ph *ProductHandler) Post(w http.ResponseWriter, r *http.Request) {
-
+	defer r.Body.Close()
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		respondERROR(w, http.StatusInternalServerError, "Something's wrong")
+		return
+	}
+	ct := r.Header.Get("Content-Type")
+	if ct != "application/json" {
+		respondERROR(w, http.StatusUnsupportedMediaType, "Invalid content type")
+		return
+	}
+	// Previously defined type struct
+	var incommingProduct Product
+	// json.Unmarshal takes pointer to struct
+	err = json.Unmarshal(body, &incommingProduct)
+	if err != nil {
+		respondERROR(w, http.StatusBadRequest, "Cand parse JSON")
+		return
+	}
+	// Again, since we are touching data struct ProductHandler (mocking DN)
+	// We MUST use sync.Mutex to prevent manipaling same data
+	// from many go routines
+	defer ph.Unlock()
+	ph.Lock()
+	ph.products = append(ph.products, incommingProduct)
+	respondJSON(w, http.StatusOK, ph.products)
 }
 
 // Put function updates data in DB
