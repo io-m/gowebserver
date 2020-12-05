@@ -3,7 +3,6 @@ package router
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -141,22 +140,28 @@ func (ph *ProductHandler) Post(w http.ResponseWriter, r *http.Request) {
 
 // Put function updates data in DB
 func (ph *ProductHandler) Put(w http.ResponseWriter, r *http.Request) {
+	// Getting an ID from r *http.Request cause we need to update
+	// specific element from products struct (mock DB)
 	id, err := getId(r)
 	if err != nil {
 		respondERROR(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Same as with posting method -> since we are reading incomming
+	// request we need Reader interface and close it afterwards
 	defer r.Body.Close()
 	body, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		respondERROR(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// Making sure that header Content-Type is correct
 	ct := r.Header.Get("content-type")
 	if ct != "application/json" {
 		respondERROR(w, http.StatusUnsupportedMediaType, "Content-Type not accepted... Need application/json")
 		return
 	}
+	// Unmarshalling (decoding) incomming JSOn into golang struct type
 	var incommingProduct Product
 	if err = json.Unmarshal(body, &incommingProduct); err != nil {
 		respondERROR(w, http.StatusBadRequest, err.Error())
@@ -168,6 +173,9 @@ func (ph *ProductHandler) Put(w http.ResponseWriter, r *http.Request) {
 		respondERROR(w, http.StatusNotFound, "There is no that product")
 		return
 	}
+	// Checking if incomming request data has value
+	// and replacing old value with new one at specified index in
+	// slice of AllProducts represented with the value of provided ID
 	if incommingProduct.Name != "" {
 		ph.products[id].Name = incommingProduct.Name
 	} else if incommingProduct.Price != 0.0 {
@@ -178,5 +186,20 @@ func (ph *ProductHandler) Put(w http.ResponseWriter, r *http.Request) {
 
 // Delete function deletes data from DB
 func (ph *ProductHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello from DELETE method")
+	id, err := getId(r)
+	if err != nil {
+		respondERROR(w, http.StatusNotFound, err.Error())
+		return
+	}
+	defer ph.Unlock()
+	ph.Lock()
+	if id >= len(ph.products) || id < 0 {
+		respondERROR(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Weird Golang delete element from slice method
+	// appending elements from slice with new destructured slice
+	// with all of the rest of elements
+	ph.products = append(ph.products[:id], ph.products[id+1:]...)
+	respondJSON(w, http.StatusMovedPermanently, ph.products)
 }
