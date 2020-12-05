@@ -136,12 +136,44 @@ func (ph *ProductHandler) Post(w http.ResponseWriter, r *http.Request) {
 	defer ph.Unlock()
 	ph.Lock()
 	ph.products = append(ph.products, incommingProduct)
-	respondJSON(w, http.StatusOK, ph.products)
+	respondJSON(w, http.StatusCreated, incommingProduct)
 }
 
 // Put function updates data in DB
 func (ph *ProductHandler) Put(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "Hello from PUT method")
+	id, err := getId(r)
+	if err != nil {
+		respondERROR(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	defer r.Body.Close()
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		respondERROR(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ct := r.Header.Get("content-type")
+	if ct != "application/json" {
+		respondERROR(w, http.StatusUnsupportedMediaType, "Content-Type not accepted... Need application/json")
+		return
+	}
+	var incommingProduct Product
+	if err = json.Unmarshal(body, &incommingProduct); err != nil {
+		respondERROR(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	defer ph.Unlock()
+	ph.Lock()
+	if id >= len(ph.products) || id < 0 {
+		respondERROR(w, http.StatusNotFound, "There is no that product")
+		return
+	}
+	if incommingProduct.Name != "" {
+		ph.products[id].Name = incommingProduct.Name
+	} else if incommingProduct.Price != 0.0 {
+		ph.products[id].Price = incommingProduct.Price
+	}
+	respondJSON(w, http.StatusOK, ph.products[id])
 }
 
 // Delete function deletes data from DB
